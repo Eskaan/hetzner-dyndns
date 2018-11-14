@@ -1,0 +1,5 @@
+#!/bin/bash
+freenom_email="example@example.com"
+freenom_passwd="hackme"
+freenom_domain_name="example.com"
+freenom_domain_id="000000000"
