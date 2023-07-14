@@ -1,68 +1,38 @@
 #!/bin/bash
 set -u
 
-# settings
-# Login information of freenom.com
-# Open DNS management page in your browser.
-# URL vs settings:
-#   https://my.freenom.com/clientarea.php?managedns={freenom_domain_name}&domainid={freenom_domain_id}
-source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/freenom.conf
-BASE_URL="https://my.freenom.com"
-CAREA_URL="$BASE_URL/clientarea.php"
-LOGIN_URL="$BASE_URL/dologin.php"
-LOGOUT_URL="$BASE_URL/logout.php"
-MANAGED_URL="$CAREA_URL?managedns=$freenom_domain_name&domainid=$freenom_domain_id"
-GET_IP_URL="https://api.ipify.org/"
+GET_IP4_URL="https://api.ipify.org/"
+GET_IP6_URL="https://api64.ipify.org/"
+API_TOKEN="FpDjj9AaN82FD4Pz8KqL8TedxxpYURzN"
+ZONE_ID="ox7nRCQ49bhNBDgsLQC7J3"
+
 LOGGER_SCRIPT=$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/logger.sh
 
 # get current ip address
-current_ip="$(curl -s "$GET_IP_URL")"
+IP4="$(curl -s "$GET_IP4_URL")"
+IP6="$(curl -s "$GET_IP6_URL")"
 
-if [ -z "$current_ip" ]; then
+if [ -z "$IP4" ]; then
         $LOGGER_SCRIPT continue "Could not get current IP address."
     exit 1
 fi
 
-cookie_file=$(mktemp)
-cleanup() {
-    $LOGGER_SCRIPT continue ">Cleanup"
-    rm -f "$cookie_file"
+update_record() {
+	RES=$(
+		curl -sX "PUT" "https://dns.hetzner.com/api/v1/records/$1" \
+			-H 'Content-Type: application/json' \
+			-H "Auth-API-Token: $API_TOKEN" \
+			-d '{"value":"'$3'","type":"'$2'","name":"'$4'","zone_id":"'$ZONE_ID'","ttl":600}'
+	)
+	if echo "$RES" | jq -e ".error" >> /dev/null; then
+		$LOGGER_SCRIPT continue "Update failed with '$RES'"
+	fi
 }
-trap cleanup INT EXIT TERM
-
-$LOGGER_SCRIPT continue ">Login"
-loginResult=$(curl --compressed -k -L -c "$cookie_file" \
-                   -F "username=$freenom_email" -F "password=$freenom_passwd" \
-                   -e "$CAREA_URL" \
-                   "$LOGIN_URL" 2>&1)
-
-if [ ! -s "$cookie_file" ]; then
-    $LOGGER_SCRIPT continue " Login failed: empty cookie."
-    exit 1
-fi
-
-if echo "$loginResult" | grep -q "/clientarea.php?incorrect=true"; then
-    $LOGGER_SCRIPT continue " Login failed."
-    exit 1
-fi
-
-$LOGGER_SCRIPT continue "Update $current_ip to domain($freenom_domain_name)"
-updateResult=$(curl --compressed -k -L -b "$cookie_file" \
-                    -e "$MANAGED_URL" \
-                    -F "dnsaction=modify" \
-                    -F "records[0][line]=" \
-                    -F "records[0][type]=A" \
-                    -F "records[0][name]=" \
-                    -F "records[0][ttl]=14440" \
-                    -F "records[0][value]=$current_ip" \
-                    "$MANAGED_URL" 2>&1)
-
-if ! echo "$updateResult" | grep -q "name=\"records\[0\]\[value\]\" value=\"$current_ip\""; then
-    $LOGGER_SCRIPT continue " Update failed." 1>&2
-    exit 1
-fi
-
-$LOGGER_SCRIPT continue ">Logout"
-curl --compressed -k -b "$cookie_file" "$LOGOUT_URL" > /dev/null 2>&1
+update_record 58179801307df4acfda2a8be8a1d4c0b A $IP4 @
+update_record 071954c2f1b4c34efb461834ff7b8c68 A $IP4 mail
+update_record 423ec165bc6f34b2e4ec0b3a90b3d633 A $IP4 www
+update_record d6d7c78e2d8b54b99a2363f7e4148bfb AAAA $IP6 @
+update_record 5483ce578918b2d77e37eb8add0d8788 AAAA $IP6 mail
+update_record c68ca41f8b4e84ec9d216a8627f1822a AAAA $IP6 www
 
 exit 0

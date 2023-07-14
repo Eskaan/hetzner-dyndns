@@ -1,25 +1,22 @@
 #!/bin/bash
+set -u
+
 GET_IP_URL="https://api.ipify.org/"
+DOMAIN_NAME="eskaan.de"
+
 UPDATE_SCRIPT=$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/update.sh
 LOGGER_SCRIPT=$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/logger.sh
-source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/freenom.conf
 
-HOST_RESULT="$(host $freenom_domain_name 80.80.80.80)"
-DNS_IP=$(echo $HOST_RESULT | cut -d' ' -f 12)
+DNS_IP="$(dig +short @hydrogen.ns.hetzner.com $DOMAIN_NAME A)"
 CURR_IP="$(curl -s $GET_IP_URL)"
 
-$LOGGER_SCRIPT start
-
-$LOGGER_SCRIPT continue "Current IP: $CURR_IP :: DNS IP: $DNS_IP"
-
-if [ $DNS_IP = $CURR_IP ]; then
-	$LOGGER_SCRIPT continue "No change is needed, exiting"
-else
+if [ "$DNS_IP" != "$CURR_IP" ]; then
 	if [ ${#CURR_IP} -lt 15 ]; then
-		$LOGGER_SCRIPT continue "Change is needed procedeing to execute freenom update script"
+		$LOGGER_SCRIPT continue "Updating $DNS_IP to $CURR_IP"
 		$UPDATE_SCRIPT
 	else 
 		$LOGGER_SCRIPT continue "Error: api result longer than expected."
 	fi
+else
+	echo "Not updating."
 fi
-$LOGGER_SCRIPT end
