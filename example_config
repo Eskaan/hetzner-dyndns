@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# DOMAIN/IP to fetch current IP from
+GET_IP_URL="https://api64.ipify.org/"
+
+# Hetzner API key
+API_TOKEN="your-api-key"
+
+# Root domain name
+DOMAIN_NAME="example.org"
+
+# Array of subdomains to change (@ is the main domain)
+SUBDOMAINS=("@" "www")
+
+# Path to log updates and failures to
+LOG_PATH="/var/log/update-dns"
