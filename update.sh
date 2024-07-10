@@ -1,8 +1,9 @@
 #!/bin/bash
 set -u
+set -e
 
 # load config
-# Suplies GET_IP_URL API_TOKEN ZONE_ID DOMAIN_NAME LOG_PATH SUBDOMAINS
+# Suplies GET_IP_URL API_TOKEN ZONE_ID DOMAIN_NAME LOG_PATH SUBDOMAINS 
 source /etc/hetzner-dns/config
 
 logger() {
@@ -23,21 +24,26 @@ logger() {
 	esac
 }
 
-check() {
+checkV4() {
 	DNS_IP4="$(dig +short @hydrogen.ns.hetzner.com $DOMAIN_NAME A)"
-	DNS_IP6="$(dig +short @hydrogen.ns.hetzner.com $DOMAIN_NAME AAAA)"
 	IP4="$(curl -4s "$GET_IP_URL")"
-	IP6="$(curl -6s "$GET_IP_URL")"
 	IP4_REGEX='^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
-	IP6_REGEX='([a-f0-9:]+:+)+[a-f0-9]+'
 
 	if [ "$DNS_IP4" != "$IP4" ]; then
 		if echo $IP4 | grep -Pqe $IP4_REGEX; then
-			update automatic all "$IP4" "$IP6"
+			update automatic v4 "$IP4" ""
 		else
 			logger continue "API returned invalid IPv4 '$IP4'"
 		fi
-	elif [ "$DNS_IP6" != "$IP6" ]; then
+	fi
+}
+
+checkV6() {
+	DNS_IP6="$(dig +short @hydrogen.ns.hetzner.com $DOMAIN_NAME AAAA)"
+	IP6="$(curl -6s "$GET_IP_URL")"
+	IP6_REGEX='([a-f0-9:]+:+)+[a-f0-9]+'
+
+	if [ "$DNS_IP6" != "$IP6" ]; then
 		if echo $IP6 | grep -Pqe $IP6_REGEX; then
 			update automatic v6 "" "$IP6"
 		else
@@ -69,7 +75,10 @@ update() {
 		manual)
 			logger continue "Manual update to $IP4 [$IP6]";;
 		automatic)
-			logger continue "Update to $IP4 [$IP6] for $2";;
+			case $2 in
+				v4) logger continue "Update to $IP4 for v4";;
+				v6) logger continue "Update to $IP6 for v6";;
+			esac;;
 	esac
 
 	zone_id=$(curl -s \
@@ -112,10 +121,17 @@ case $1 in
 		update manual all "$(curl -4s "$GET_IP_URL")" "$(curl -6s "$GET_IP_URL")"
 		;;
 	check)
-		check
+		checkV4
+		checkV6
+		;;
+	checkV4)
+		checkV4
+		;;
+	checkV6)
+		checkV6
 		;;
 	*)
-		echo "Unkown option '$1'. Valid are 'update' and 'check'"
+		echo "Unkown option '$1'. Valid are 'update' and 'check' ('checkV4' 'checkV6')"
 		exit 1
 		;;
 esac
